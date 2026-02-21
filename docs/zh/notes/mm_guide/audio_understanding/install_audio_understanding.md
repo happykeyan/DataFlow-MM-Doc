@@ -11,5 +11,5 @@ conda create -n myvenv python=3.10
 conda activate myvenv
 
 cd ./DataFlow-MM
-pip install open-dataflow-mm[audio]
+pip install -e .[audio]
 ```

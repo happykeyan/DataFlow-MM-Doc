@@ -7,84 +7,210 @@ permalink: /zh/mm_guide/dl0jhc6u/
 
 ## 语音活动检测与切分流水线
 
-该流水线用于对输入音频完成以下处理链路：
-- VAD 语音活动检测（Silero VAD）：识别音频中的语音片段区间（start/end 时间戳）；
-- 按时间戳切分音频（TimestampChunkRowGenerator）：根据 VAD 结果对音频进行切分（或生成切分后的行），用于后续 ASR、对齐或数据清洗等任务。
+## 1. 概述
+ 
+**语音活动检测流水线**使用 Silero VAD 模型和音频时间戳分块生成器，自动检测音频中的语音活动区间并生成对应的时间戳，适用于语音识别预处理、音频分段和多模态数据集构建任务。
+ 
+我们支持以下应用场景：
+ 
+- 音频语音活动检测与分段
+- 语音识别预处理
+- 多模态音频训练数据集构建
+- 音频内容分析与理解
+ 
+流水线的主要流程包括：
+ 
+1. **数据加载**：从 sample_data.jsonl 读取音频文件路径
+2. **语音检测**：使用 Silero VAD 模型检测语音活动区间
+3. **时间戳生成**：生成语音活动的时间戳并保存结果
+ 
+---
 
-## 第一步: 安装环境
-见[Audio环境安装](./install_audio_understanding.md)
+## 2. 快速开始
+ 
+### 第一步：创建新的 DataFlow 工作文件夹
+```bash
+mkdir run_dataflow_mm
+cd run_dataflow_mm
+```
+ 
+### 第二步：初始化 DataFlow-MM
+```bash
+dataflowmm init
+```
+这时你会看到：
+```bash
+run_dataflow_mm/gpu_pipelines/audio_voice_activity_detection_pipeline.py  
+```
+ 
+### 第三步：配置模型路径和参数
 
-## 第二步: 导入包
+在 `audio_voice_activity_detection_pipeline.py` 中配置语音检测模型参数：
+ 
+```python
+# Silero VAD 模型配置
+self.silero_vad_generator = SileroVADGenerator(
+    repo_or_dir="snakers4/silero-vad",
+    source="github",
+    device=['cuda:0'],                      # GPU 设备
+    num_workers=1,
+    threshold=0.5,                          # 语音检测阈值
+    sampling_rate=16000,                    # 采样率
+    max_speech_duration_s=30.0,            # 最大语音时长
+    min_silence_duration_s=0.1,            # 最小静音时长
+    speech_pad_s=0.03,                     # 语音填充时长
+    return_seconds=True,                     # 返回秒级时间戳
+)
+ 
+# 时间戳分块生成器配置
+self.timestamp_chunk_row_generator = TimestampChunkRowGenerator(
+    dst_folder="./cache",
+    timestamp_unit="second",
+    mode="split",
+    max_audio_duration=30.0,               # 最大音频时长
+    hop_size_samples=512,                  # 跳步大小
+    sampling_rate=16000,                   # 采样率
+    num_workers=1,
+)
+```
+ 
+### 第四步：一键运行
+```bash
+python gpu_pipelines/audio_voice_activity_detection_pipeline.py
+```
+ 
+---
+
+## 3. 数据流与流水线逻辑
+ 
+### 1. **输入数据**
+ 
+该流程的输入数据包括以下字段：
+ 
+* **audio**：音频文件路径列表，如 `["path/to/audio.wav"]`
+ 
+这些输入数据存储在 `jsonl` 文件中，并通过 `FileStorage` 对象进行管理和读取。默认数据路径为：
+ 
+```python
+self.storage = FileStorage(
+    first_entry_file_name="../example_data/audio_voice_activity_detection_pipeline/sample_data.jsonl",
+    cache_path="./cache",
+    file_name_prefix="audio_voice_activity_detection_pipeline",
+    cache_type="jsonl",
+)
+```
+ 
+**输入数据示例**（`sample_data.jsonl`）：
+ 
+```jsonl
+{"audio": ["../example_data/audio_voice_activity_detection_pipeline/test.wav"], "conversation": [{"from": "human", "value": "" }]}
+```
+ 
+### 2. **语音活动检测与分块**
+ 
+流程的核心步骤包括：
+ 
+**语音活动检测**：
+ 
+```python
+self.silero_vad_generator.run(
+    storage=self.storage.step(),
+    input_audio_key='audio',
+    output_answer_key='timestamps',
+)
+```
+ 
+**时间戳分块生成**：
+ 
+```python
+self.timestamp_chunk_row_generator.run(
+    storage=self.storage.step(),
+    input_audio_key="audio",
+    input_timestamps_key="timestamps",
+)
+```
+
+### 3. **输出数据**
+ 
+最终，流水线生成的输出数据将包含以下内容：
+ 
+* **audio**：原始音频路径
+* **timestamps**：语音活动检测的时间戳结果
+ 
+---
+ 
+## 4. 流水线示例
+ 
+以下给出示例流水线，展示如何使用 SileroVADGenerator 和 TimestampChunkRowGenerator 进行语音活动检测。
+
 ```python
 from dataflow.utils.storage import FileStorage
 from dataflow.operators.core_audio import (
     SileroVADGenerator,
     TimestampChunkRowGenerator,
 )
-```
+from dataflow.serving import LocalModelVLMServing_vllm, APIVLMServing_openai
 
-## 第三步: 按如下格式填写音频路径, 准备需要进行音频转录或翻译的数据
-```jsonl
-{"audio": ["../example_data/audio_voice_activity_detection_pipeline/test.wav"], "conversation": [{"from": "human", "value": "" }]}
-```
+class Pipeline:
+    def __init__(self):
+        self.storage = FileStorage(
+            first_entry_file_name="../example_data/audio_voice_activity_detection_pipeline/sample_data.jsonl",
+            cache_path="./cache",
+            file_name_prefix="audio_voice_activity_detection_pipeline",
+            cache_type="jsonl",
+        )
 
-## 第四步: 按下述格式将数据路径填入FileStorage中
-```python
-storage = FileStorage(
-    first_entry_file_name="../example_data/audio_voice_activity_detection/sample_data.jsonl",
-    cache_path="./cache",
-    file_name_prefix="audio_voice_activity_detection",
-    cache_type="jsonl",
-)
-```
-
-## 第五步: 初始化SileroVAD语音活动检测算子
-```python
-silero_vad_generator = SileroVADGenerator(
-    repo_or_dir="snakers4/silero-vad",
-    source="github",
-    device=['cuda:0'],
-    num_workers=1,
-    threshold=0.5,
-    sampling_rate=16000,
-    max_speech_duration_s=30.0,
-    min_silence_duration_s=0.1,
-    speech_pad_s=0.03,
-    return_seconds=True,
-)
-```
-
-## 第六步: 根据时间戳切分音频/生成切分行
-```python
-timestamp_chunk_row_generator = TimestampChunkRowGenerator(
-    dst_folder="./cache",
-    timestamp_unit="second",
-    mode="split",
-    max_audio_duration=30.0,
-    hop_size_samples=512,
-    sampling_rate=16000,
-    num_workers=1,
-)
+        self.silero_vad_generator = SileroVADGenerator(
+            repo_or_dir="snakers4/silero-vad",
+            source="github",
+            device=['cuda:0'],
+            num_workers=1,
+            threshold=0.5,
+            sampling_rate=16000,
+            max_speech_duration_s=30.0,
+            min_silence_duration_s=0.1,
+            speech_pad_s=0.03,
+            return_seconds=True,
+        )
+        self.timestamp_chunk_row_generator = TimestampChunkRowGenerator(
+            dst_folder="./cache",
+            timestamp_unit="second",
+            mode="split",
+            max_audio_duration=30.0,
+            hop_size_samples=512,
+            sampling_rate=16000,
+            num_workers=1,
+        )
     
+    def forward(self):
+        self.silero_vad_generator.run(
+            storage=self.storage.step(),
+            input_audio_key='audio',
+            output_answer_key='timestamps',
+        )
+        self.silero_vad_generator.close()
+
+        self.timestamp_chunk_row_generator.run(
+            storage=self.storage.step(),
+            input_audio_key="audio",
+            input_timestamps_key="timestamps",
+        )
+        self.timestamp_chunk_row_generator.close()
+
+if __name__ == "__main__":
+    pipeline = Pipeline()
+    pipeline.forward()
 ```
 
-## 第七步: 执行算子
-语音转录文字
-```python
-silero_vad_generator.run(
-    storage=storage.step(),
-    input_audio_key='audio',
-    output_answer_key='timestamps',
-)
-silero_vad_generator.close()
 
-timestamp_chunk_row_generator.run(
-    storage=storage.step(),
-    input_audio_key="audio",
-    input_timestamps_key="timestamps",
-)
-timestamp_chunk_row_generator.close()
-```
+
+
+
+
+
+
+
+
 
 ## 合成数据示例
 ```json

@@ -23,6 +23,8 @@ export const MMGuide: ThemeNote = defineNoteConfig({
             prefix: 'image_understanding',
             items: [
                 'install_image_understanding',
+                'image_caption_api',
+                'image_vqa_api',
                 'context_vqa',
                 'context_vqa_api',
                 'image_gcot',

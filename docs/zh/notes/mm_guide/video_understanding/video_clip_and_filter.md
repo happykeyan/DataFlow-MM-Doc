@@ -54,7 +54,7 @@ run_dataflow_mm/gpu_pipelines/video_clip_and_filter_pipeline.py
 
 ```python
 # 在 VideoAestheticFilter 中配置美学评分模型
-clip_model="/path/to/ViT-L-14.pt",  # 从 https://openaipublic.azureedge.net/clip/models/.../ViT-L-14.pt 下载
+clip_model="/path/to/ViT-L-14.pt",  # 从 https://openaipublic.azureedge.net/clip/models/.../ViT-L-14.pt 下载, 可选：available models = ['RN50', 'RN101', 'RN50x4', 'RN50x16', 'RN50x64', 'ViT-B/32', 'ViT-B/16', 'ViT-L/14', 'ViT-L/14@336px']
 mlp_checkpoint="/path/to/sac+logos+ava1-l14-linearMSE.pth",  # 从 https://github.com/christophschuhmann/improved-aesthetic-predictor 下载
 
 # 在 VideoOCRFilter 中配置 OCR 模型
