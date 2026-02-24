@@ -26,8 +26,8 @@ export const MMOperators: ThemeNote = defineNoteConfig({
                     collapsed: false,
                     prefix: 'generate/',
                     items: [
-                        'image_caption',
-                        'image_qa',
+                        // 'image_caption',
+                        // 'image_qa',
                         'image_pers_qa',
                         'multimodal_math',
                         "prompt_templated_vqa_generator",

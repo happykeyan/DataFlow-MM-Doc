@@ -7,13 +7,13 @@ permalink: /en/mm_guide/image_vqa_api_pipeline/
 
 ## 1. Overview
 
-The **Image VQA Generation Pipeline (API Version)** focuses on automatically constructing high-quality **Question-Answer Pairs** directly from image content. By leveraging high-performance VLM APIs, the pipeline generates questions and accurate answers that align with human logic based on visual features. This is highly valuable for training multimodal dialogue models, evaluating visual understanding capabilities, and building domain-specific VQA datasets (e.g., medical, security, e-commerce).
+**Image VQA Generation Pipeline (API Version)** focuses on automatically constructing high-quality **Question-Answer (QA) Pairs** directly from image content. Leveraging high-performance VLM APIs, this pipeline generates human-like questions and accurate answers based on the visual features of an image. This is highly valuable for training multimodal dialogue models, evaluating visual understanding capabilities, and building industry-specific VQA datasets (e.g., medical, security, e-commerce).
 
 We support the following application scenarios:
 
-* **Instruction Tuning Data Synthesis**: Generate diverse questioning styles to enhance model interaction capabilities.
-* **Visual Understanding Evaluation**: Create judgment, descriptive, or reasoning-based Q&A focused on image details.
-* **Automated Annotation**: Replace manual labor for large-scale image Q&A labeling, reducing data production costs.
+* **Instruction Fine-tuning Data Synthesis**: Generate diverse questioning styles to enhance model interaction capabilities.
+* **Visual Understanding Evaluation**: Produce judgment, descriptive, or reasoning-based QAs targeting specific image details.
+* **Automated Annotation**: Replace manual labor for large-scale image QA annotation, reducing data production costs.
 
 ---
 
@@ -21,7 +21,7 @@ We support the following application scenarios:
 
 ### Step 1: Configure API Key
 
-Ensure your environment variables are set with API access permissions:
+Ensure your environment variables include the API access rights:
 
 ```python
 import os
@@ -32,7 +32,7 @@ os.environ["DF_API_KEY"] = "sk-your-key-here"
 ### Step 2: Initialize Environment
 
 ```bash
-# Create and enter the working directory
+# Create and enter the workspace
 mkdir run_vqa_dataflow
 cd run_vqa_dataflow
 
@@ -41,16 +41,16 @@ dataflowmm init
 
 ```
 
-### Step 3: Download Sample Data
+### Step 3: Download Example Data
 
 ```bash
-huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir data
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 
-### Step 4: Configure the Script
+### Step 4: Configure Running Script
 
-In the generated `api_pipelines/image_vqa.py`, you can customize the VLM model name and API information:
+In `api_pipelines/image_vqa.py`, you can customize the VLM model name and API information:
 
 ```python
 self.vlm_serving = APIVLMServing_openai(
@@ -65,22 +65,22 @@ self.vlm_serving = APIVLMServing_openai(
 ### Step 5: Execute the Pipeline
 
 ```bash
-python api_pipelines/image_vqa.py --images_file data/image_vqa/sample_data.json
+python api_pipelines/image_vqa.py 
 
 ```
 
 ---
 
-## 3. Data Flow & Logic
+## 3. Data Flow and Logic Description
 
 ### 1. **Input Data Format**
 
-The input file must contain the image path and a prompt to trigger VQA generation:
+The input file must contain the image path and a prompt to guide the VQA generation:
 
 ```json
 [
     {
-        "image": ["./data/image_vqa/person.png"],
+        "image": ["./example_data/image_vqa/person.png"],
         "conversation": [
             {
                 "from": "human",
@@ -94,20 +94,20 @@ The input file must contain the image path and a prompt to trigger VQA generatio
 
 ### 2. **Core Operator: PromptedVQAGenerator**
 
-This operator is the core engine for generating Q&A pairs:
+This operator serves as the engine for generating QA pairs:
 
-* **Role Definition**: Through the `system_prompt` set as "image question-answer generator", the model is guided to output standard Q&A formats.
-* **Multi-turn Support**: Capable of combining historical context or specific instructions in the `conversation` field to optimize the focus of generated questions.
-* **High-Throughput Processing**: Utilizes `max_workers` for parallel calls, suitable for processing image datasets at scales of  entries.
+* **Role Definition**: Through the `system_prompt`, the model is set as an "image question-answer generator," guiding it to output standard QA formats.
+* **Multi-turn Support**: It can combine historical context or specific instructions in the `conversation` field to refine the focus of question generation.
+* **High Throughput Processing**: Utilizes `max_workers` to implement parallel calls, suitable for processing data at a scale of tens of thousands of images or more.
 
-### 3. **Output Example**
+### 3. **Output Result Example**
 
-Generated VQA results are stored as text in the `vqa` field, typically containing multiple Q&A sets:
+The generated VQA results are stored as text in the `vqa` field, typically containing multiple Q&A sets:
 
 ```json
 [
   {
-    "image": ["./data/image_vqa/person.png"],
+    "image": ["./example_data/image_vqa/person.png"],
     "vqa": "- Q: What is the title of the movie shown on the poster?\n  A: Nightmare Alley\n\n- Q: What color is the film’s title text?\n  A: Gold"
   }
 ]
@@ -116,67 +116,67 @@ Generated VQA results are stored as text in the `vqa` field, typically containin
 
 ---
 
-## 4. Full Pipeline Code
+## 4. Complete Pipeline Code
 
 ```python
 import os
-import argparse
+
+# Set API Key environment variable
+os.environ["DF_API_KEY"] = "sk-xxx"
+
 from dataflow.utils.storage import FileStorage
+from dataflow.core import LLMServingABC
 from dataflow.serving.api_vlm_serving_openai import APIVLMServing_openai
 from dataflow.operators.core_vision import PromptedVQAGenerator
 
-# Configure API Environment
-os.environ["DF_API_KEY"] = "sk-xxx"
 
 class ImageVQAPipeline:
     """
-    One-click batch image VQA generation pipeline
+    Generate batch VQA for images with a single command.
     """
 
-    def __init__(
-        self,
-        first_entry_file: str,
-        cache_path: str = "./cache_local_vqa",
-        file_name_prefix: str = "vqa_task",
-        cache_type: str = "json",
-    ):
-        # 1. Initialize Storage: Supports checkpoints and multi-format export
+    def __init__(self, llm_serving: LLMServingABC = None):
+
+        # ---------- 1. Storage ----------
         self.storage = FileStorage(
-            first_entry_file_name=first_entry_file,
-            cache_path=cache_path,
-            file_name_prefix=file_name_prefix,
-            cache_type=cache_type,
+            first_entry_file_name="./example_data/image_vqa/sample_data.json",
+            cache_path="./cache_local",
+            file_name_prefix="qa",
+            cache_type="json",
         )
 
-        # 2. Configure VLM API Service
+        # ---------- 2. Serving ----------
         self.vlm_serving = APIVLMServing_openai(
-            api_url="http://172.96.141.132:3001/v1",
-            key_name_of_api_key="DF_API_KEY",
+            api_url="http://172.96.141.132:3001/v1", # Any API platform compatible with OpenAI format
+            key_name_of_api_key="DF_API_KEY", # Set the API key in environment variable or line 4
             model_name="gpt-5-nano-2025-08-07",
-            max_workers=10
+            image_io=None,
+            send_request_stream=False,
+            max_workers=10,
+            timeout=1800
         )
 
-        # 3. Initialize VQA Operator
+        # ---------- 3. Operator ----------
         self.vqa_generator = PromptedVQAGenerator(
             serving=self.vlm_serving,
-            system_prompt="You are an image question-answer generator. Your task is to generate a question-answer pair for the given image content."
+            system_prompt= "You are a image question-answer generator. Your task is to generate a question-answer pair for the given image content."
         )
 
+    # ------------------------------------------------------------------ #
     def forward(self):
-        # Execute inference task
+        input_image_key = "image"
+        output_answer_key = "vqa"
+
         self.vqa_generator.run(
             storage=self.storage.step(),
             input_conversation_key="conversation",
-            input_image_key="image",
-            output_answer_key="vqa",
+            input_image_key=input_image_key,
+            output_answer_key=output_answer_key,
         )
 
+# ---------------------------- CLI Entry ------------------------------- #
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Batch VQA generation")
-    parser.add_argument("--images_file", default="data/image_vqa/sample_data.json")
-    args = parser.parse_args()
-
-    pipe = ImageVQAPipeline(first_entry_file=args.images_file)
+    pipe = ImageVQAPipeline()
     pipe.forward()
 
 ```

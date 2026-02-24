@@ -44,7 +44,7 @@ dataflowmm init
 ### 第三步：下载示例数据
 
 ```bash
-huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir data
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir dexample_dataa
 
 ```
 
@@ -65,7 +65,7 @@ self.vlm_serving = APIVLMServing_openai(
 ### 第五步：执行流水线
 
 ```bash
-python api_pipelines/image_vqa.py --images_file data/image_vqa/sample_data.json
+python api_pipelines/image_vqa.py 
 
 ```
 
@@ -80,7 +80,7 @@ python api_pipelines/image_vqa.py --images_file data/image_vqa/sample_data.json
 ```json
 [
     {
-        "image": ["./data/image_vqa/person.png"],
+        "image": ["./example_data/image_vqa/person.png"],
         "conversation": [
             {
                 "from": "human",
@@ -107,7 +107,7 @@ python api_pipelines/image_vqa.py --images_file data/image_vqa/sample_data.json
 ```json
 [
   {
-    "image": ["./data/image_vqa/person.png"],
+    "image": ["./example_data/image_vqa/person.png"],
     "vqa": "- Q: What is the title of the movie shown on the poster?\n  A: Nightmare Alley\n\n- Q: What color is the film’s title text?\n  A: Gold"
   }
 ]
@@ -120,63 +120,63 @@ python api_pipelines/image_vqa.py --images_file data/image_vqa/sample_data.json
 
 ```python
 import os
-import argparse
+
+# 设置 API Key 环境变量
+os.environ["DF_API_KEY"] = "sk-xxx"
+
 from dataflow.utils.storage import FileStorage
+from dataflow.core import LLMServingABC
 from dataflow.serving.api_vlm_serving_openai import APIVLMServing_openai
 from dataflow.operators.core_vision import PromptedVQAGenerator
 
-# 配置 API 环境
-os.environ["DF_API_KEY"] = "sk-xxx"
 
 class ImageVQAPipeline:
     """
-    一键式图片批量 VQA 生成流水线
+    一行命令即可完成图片批量 VQA 生成。
     """
 
-    def __init__(
-        self,
-        first_entry_file: str,
-        cache_path: str = "./cache_local_vqa",
-        file_name_prefix: str = "vqa_task",
-        cache_type: str = "json",
-    ):
-        # 1. 初始化存储：支持断点续传与多格式导出
+    def __init__(self, llm_serving: LLMServingABC = None):
+
+        # ---------- 1. Storage ----------
         self.storage = FileStorage(
-            first_entry_file_name=first_entry_file,
-            cache_path=cache_path,
-            file_name_prefix=file_name_prefix,
-            cache_type=cache_type,
+            first_entry_file_name="./example_data/image_vqa/sample_data.json",
+            cache_path="./cache_local",
+            file_name_prefix="qa",
+            cache_type="json",
         )
 
-        # 2. 配置 VLM API 服务
+        # ---------- 2. Serving ----------
         self.vlm_serving = APIVLMServing_openai(
-            api_url="http://172.96.141.132:3001/v1",
-            key_name_of_api_key="DF_API_KEY",
+            api_url="http://172.96.141.132:3001/v1", # Any API platform compatible with OpenAI format
+            key_name_of_api_key="DF_API_KEY", # Set the API key for the corresponding platform in the environment variable or line 4
             model_name="gpt-5-nano-2025-08-07",
-            max_workers=10
+            image_io=None,
+            send_request_stream=False,
+            max_workers=10,
+            timeout=1800
         )
 
-        # 3. 初始化 VQA 算子
+        # ---------- 3. Operator ----------
         self.vqa_generator = PromptedVQAGenerator(
             serving=self.vlm_serving,
-            system_prompt="You are a image question-answer generator. Your task is to generate a question-answer pair for the given image content."
+            system_prompt= "You are a image question-answer generator. Your task is to generate a question-answer pair for the given image content."
         )
 
+    # ------------------------------------------------------------------ #
     def forward(self):
-        # 执行推理任务
+        input_image_key = "image"
+        output_answer_key = "vqa"
+
         self.vqa_generator.run(
             storage=self.storage.step(),
             input_conversation_key="conversation",
-            input_image_key="image",
-            output_answer_key="vqa",
+            input_image_key=input_image_key,
+            output_answer_key=output_answer_key,
         )
 
+# ---------------------------- CLI 入口 -------------------------------- #
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Batch VQA generation")
-    parser.add_argument("--images_file", default="data/image_vqa/sample_data.json")
-    args = parser.parse_args()
-
-    pipe = ImageVQAPipeline(first_entry_file=args.images_file)
+    pipe = ImageVQAPipeline()
     pipe.forward()
 
 ```

@@ -7,19 +7,19 @@ permalink: /en/mm_guide/contextvqa_api_pipeline/
 
 ## 1. Overview
 
-The **ContextVQA Multimodal QA Data Generation Pipeline (API Version)** is designed to automatically generate **Context-based Visual Question Answering (VQA) data** starting from images. This pipeline utilizes Vision-Language Models (VLM) via API to generate Wikipedia-style articles and QA pairs, which are then parsed into structured data. It is ideal for building knowledge-intensive VQA and multimodal RAG (Retrieval-Augmented Generation) datasets.
+The **ContextVQA Multimodal QA Data Generation Pipeline (API Version)** is designed to automatically generate **visual question answering data with external knowledge context (Context-based VQA)** starting from an image. This pipeline uses a Vision-Language Model (VLM) via API to generate Wikipedia-style articles and QA pairs, which are then parsed into structured data. This is ideal for building knowledge-based VQA and multimodal RAG (Retrieval-Augmented Generation) datasets.
 
-We support the following use cases:
+We support the following application scenarios:
 
-* **Knowledge-based VQA Data Synthesis**: Building QA datasets that require external knowledge reasoning.
-* **Multimodal RAG Data Construction**: Generating high-quality data for training RAG systems.
-* **Visual Reasoning Training**: Generating data where questions refer to an image, but answers must be reasoned from text context.
+* **Knowledge-based VQA Data Synthesis**: Constructing QA datasets that require external knowledge reasoning.
+* **Multimodal RAG Data Construction**: Generating high-quality data for training retrieval-augmented generation models.
+* **Visual Reasoning Training**: Generating questions that point to an image but require answers derived from textual context reasoning.
 
-The pipeline consists of three main stages:
+The main flow of the pipeline includes:
 
 1. **Data Loading**: Reading data files containing image paths.
-2. **Context and QA Generation**: Using VLM APIs to generate Wikipedia-style articles and raw QA pairs based on images.
-3. **Data Cleaning and Structuring**: Parsing raw text to extract structured `{context, qas}` formats.
+2. **Context and QA Generation**: Using a VLM API to generate Wikipedia-style articles and raw QA pairs based on images.
+3. **Data Cleaning and Structuring**: Parsing raw text to extract a structured `{context, qas}` format.
 
 ---
 
@@ -27,15 +27,15 @@ The pipeline consists of three main stages:
 
 ### Step 1: Configure API Key
 
-Set your API Key environment variable in your script:
+Set the API Key environment variable in your script:
 
 ```python
 import os
-os.environ["DF_API_KEY"] = "your_api_key"
+os.environ["DF_API_KEY"] = "sk-xxx"
 
 ```
 
-### Step 2: Create a New DataFlow Working Directory
+### Step 2: Create a New DataFlow Work Folder
 
 ```bash
 mkdir run_dataflow
@@ -50,29 +50,31 @@ dataflowmm init
 
 ```
 
-You will then see:
+You will see the following file created:
 
 ```bash
 api_pipelines/image_contextvqa.py
 
 ```
 
-### Step 4: Download Sample Data
+### Step 4: Download Example Data
 
 ```bash
-huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir data
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 
 ### Step 5: Configure Parameters
 
-Configure the API service and input data paths in `image_contextvqa.py`:
+In `image_contextvqa.py`, configure the API service and input data paths (no `argparse` required, modify default paths directly in the code):
 
 ```python
 self.vlm_serving = APIVLMServing_openai(
-    api_url="https://dashscope.aliyuncs.com/compatible-mode/v1", # Any OpenAI-compatible API platform
-    key_name_of_api_key="DF_API_KEY", # API key set in Step 1
-    model_name="qwen3-vl-8b-instruct",
+    api_url="http://172.96.141.132:3001/v1", # Any OpenAI-compatible API platform
+    key_name_of_api_key="DF_API_KEY", # Corresponding API key set in Step 1
+    model_name="gpt-5-nano-2025-08-07",
+    image_io=None,
+    send_request_stream=False,
     max_workers=10,
     timeout=1800
 )
@@ -80,14 +82,16 @@ self.vlm_serving = APIVLMServing_openai(
 ```
 
 ```python
-parser.add_argument("--images_file", default="data/image_contextvqa/sample_data.json")
-parser.add_argument("--cache_path", default="./cache_local")
-parser.add_argument("--file_name_prefix", default="context_vqa")
-parser.add_argument("--cache_type", default="json")
+self.storage = FileStorage(
+    first_entry_file_name="./example_data/image_contextvqa/sample_data.json",
+    cache_path="./cache_local",
+    file_name_prefix="context_vqa",
+    cache_type="json",
+)
 
 ```
 
-### Step 6: Run with One Command
+### Step 6: One-Click Run
 
 ```bash
 python api_pipelines/image_contextvqa.py
@@ -100,24 +104,24 @@ python api_pipelines/image_contextvqa.py
 
 ### 1. **Input Data**
 
-The input data for this process primarily includes the following fields:
+The input data for this process mainly includes the following fields:
 
-* **image**: Image file path (local path or URL).
+* **image**: Path to the image file (local path or URL).
 * **id** (Optional): Unique identifier for the data.
-* **conversation** (Optional): Conversation-formatted text used to guide context generation.
+* **conversation** (Optional): Text in dialogue format used to supplement context generation.
 
-Data is managed via `FileStorage`, supporting breakpoint resumption.
+Data is managed through `FileStorage`, which supports breakpoint resumption.
 
 **Input Data Example**:
 
 ```json
 [
     {
-        "image": ["./data/image_contextvqa/person.png"],
+        "image": ["./example_data/image_contextvqa/person.png"],
         "conversation": [
             {
                 "from": "human",
-                "value": "Write a Wikipedia article related to this image without directly referring to the image. Then write question answer pairs..."
+                "value": "Write a Wikipedia article related to this image without directly referring to the image..."
             }
         ]
     }
@@ -127,17 +131,17 @@ Data is managed via `FileStorage`, supporting breakpoint resumption.
 
 ### 2. **Core Operator Logic**
 
-The pipeline chains two core operators:
+This pipeline completes the task by concatenating two core operators:
 
 #### A. **PromptedVQAGenerator (Context Generation)**
 
-This operator calls the VLM API to generate raw text based on the prompt template.
+This operator is responsible for calling the VLM API to generate raw text based on a prompt template.
 
 **Features:**
 
-* Generates a Wikipedia-style encyclopedia article based on the image.
+* Generates a Wikipedia-style popular science article based on the image.
 * Generates QA pairs based on the article.
-* **Prompt Constraints**: Questions point to the image but avoid direct object naming; answers must come from the article and not be objects in the image; answers must be concise.
+* **Prompt Constraints**: Questions refer to the image but avoid mentioning object names; answers are from the article and are not objects in the image; answers are concise.
 
 **Operator Execution**:
 
@@ -153,12 +157,12 @@ self.vqa_generator.run(
 
 #### B. **WikiQARefiner (Result Parsing)**
 
-This operator cleans the unstructured text generated by the VLM and converts it into a standard format.
+This operator cleans the raw text generated by the VLM and converts it into a standard format.
 
 **Features:**
 
-* Cleans Markdown formatting and redundant whitespace.
-* Separates article content (Context) and QA pairs (QAs).
+* Cleans Markdown formatting and extra whitespace.
+* Separates the article content (Context) from the QA pairs (QAs).
 
 **Operator Execution**:
 
@@ -173,28 +177,24 @@ self.refiner.run(
 
 ### 3. **Output Data**
 
-The final output contains:
+The final output data generated by the pipeline will contain:
 
 * **image**: Original image path.
-* **vqa**: Raw text generated by VLM (intermediate result).
-* **context_vqa**: Structured final result containing `context` (article) and `qas` (QA list).
+* **vqa**: Raw text generated by the VLM (intermediate result).
+* **context_vqa**: Final structured result containing `context` (article) and `qas` (QA list).
 
 **Output Data Example**:
 
 ```json
 [
   {
-    "image": ["./data/image_contextvqa/person.png"],
+    "image": ["./example_data/image_contextvqa/person.png"],
     "context_vqa": {
-      "context": "**Wikipedia Article:** Nightmare Alley is a 2021 American psychological thriller film...",
+      "context": "**Wikipedia Article:** *Nightmare Alley* is a 2021 American psychological thriller...",
       "qas": [
         {
           "question": "What genre does this film belong to?",
           "answer": "Psychological thriller"
-        },
-        {
-          "question": "Who directed this film?",
-          "answer": "Guillermo del Toro"
         }
       ]
     }
@@ -207,44 +207,40 @@ The final output contains:
 
 ## 4. Pipeline Example
 
-The following is the complete `ContextVQAPipeline` implementation supporting CLI arguments.
+Below is the complete `ContextVQAPipeline` implementation.
 
 ```python
 import os
-import argparse
+
+# Set API Key environment variable
+os.environ["DF_API_KEY"] = "sk-xxx"
+
 from dataflow.utils.storage import FileStorage
+from dataflow.core import LLMServingABC
 from dataflow.serving.api_vlm_serving_openai import APIVLMServing_openai
 from dataflow.operators.core_vision import PromptedVQAGenerator
 from dataflow.operators.core_vision import WikiQARefiner
 
-# Set API Key environment variable
-os.environ["DF_API_KEY"] = "sk-xxxx"
 
 class ContextVQAPipeline:
     """
-    Generate batch ContextVQA captions with a single command.
+    Generate batch ContextVQA data for images with a single command.
     """
 
-    def __init__(
-        self,
-        first_entry_file: str = "dataflow/example/image_to_text_pipeline/capsbench_captions.jsonl",
-        cache_path: str = "./cache_local_skvqa",
-        file_name_prefix: str = "skvqa_cache_step",
-        cache_type: str = "jsonl",
-    ):
+    def __init__(self, llm_serving: LLMServingABC = None):
         # ---------- 1. Storage ----------
         self.storage = FileStorage(
-            first_entry_file_name=first_entry_file,
-            cache_path=cache_path,
-            file_name_prefix=file_name_prefix,
-            cache_type=cache_type,
+            first_entry_file_name="./example_data/image_contextvqa/sample_data.json",
+            cache_path="./cache_local",
+            file_name_prefix="context_vqa",
+            cache_type="json",
         )
 
         # ---------- 2. Serving ----------
         self.vlm_serving = APIVLMServing_openai(
-            api_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_url="http://172.96.141.132:3001/v1",
             key_name_of_api_key="DF_API_KEY",
-            model_name="qwen3-vl-8b-instruct",
+            model_name="gpt-5-nano-2025-08-07",
             image_io=None,
             send_request_stream=False,
             max_workers=10,
@@ -277,23 +273,8 @@ class ContextVQAPipeline:
             output_key=output_wiki_key
         )
 
-# ---------------------------- CLI Entry -------------------------------- #
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Batch ContextVQA generation with DataFlow")
-
-    parser.add_argument("--images_file", default="data/image_contextvqa/sample_data.json")
-    parser.add_argument("--cache_path", default="./cache_local")
-    parser.add_argument("--file_name_prefix", default="context_vqa")
-    parser.add_argument("--cache_type", default="json")
-
-    args = parser.parse_args()
-
-    pipe = ContextVQAPipeline(
-        first_entry_file=args.images_file,
-        cache_path=args.cache_path,
-        file_name_prefix=args.file_name_prefix,
-        cache_type=args.cache_type,
-    )
+    pipe = ContextVQAPipeline()
     pipe.forward()
 
 ```
