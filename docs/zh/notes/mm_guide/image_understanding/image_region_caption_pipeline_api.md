@@ -1,12 +1,12 @@
 ---
-title: 图像区域描述生成流水线RegionCap
+title: 图像区域描述生成流水线RegionCap（API版）
 createTime: 2026/01/11 22:04:27
 icon: mdi:image-text
-permalink: /zh/mm_guide/image_region_caption_pipeline/
+permalink: /zh/mm_guide/image_region_caption_pipeline_api/
 ---
 ## 1. 概述
 
-**图像区域描述生成流水线 (Image Region Caption Pipeline)** 旨在为图像中的特定区域生成详细的文本描述。该流水线结合了计算机视觉的定位能力与多模态大模型的理解能力，能够识别图像中的感兴趣区域（ROI），并为其生成精确的自然语言标注。
+**图像区域描述生成流水线（API版）** 旨在为图像中的特定区域生成详细的文本描述。该流水线结合了计算机视觉的定位能力与多模态大模型的理解能力，能够识别图像中的感兴趣区域（ROI），并为其生成精确的自然语言标注。
 
 该流水线支持处理**预定义边界框 (Bounding Box)** 数据，并将其可视化后输入 VLM 进行描述生成。
 
@@ -38,7 +38,7 @@ dataflowmm init
 ```
 这时你会看到：
 ```bash
-gpu_pipelines/image_region_caption_pipeline.py
+api_pipelines/image_region_caption_api_pipeline.py
 ```
 
 ### 第三步：下载示例数据
@@ -46,13 +46,22 @@ gpu_pipelines/image_region_caption_pipeline.py
 huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir ./example_data
 ```
 
-### 第四步：配置参数
+### 第四步：配置 API Key
+
+在 `api_pipelines/image_region_caption_api_pipeline.py` 中设置 API Key 环境变量：
+
+```python
+import os
+os.environ["DF_API_KEY"] = "your_api_key"
+```
+
+### 第五步：配置参数
+
+在 `api_pipelines/image_region_caption_api_pipeline.py` 中配置 API 服务和输入数据路径：
+
 ```python
     def __init__(
         self,
-        model_path: str = "Qwen/Qwen2.5-VL-3B-Instruct",
-        hf_cache_dir: str = "~/.cache/huggingface",
-        download_dir: str = "../ckpt/models/Qwen2.5-VL-3B-Instruct",
         first_entry_file: str = "../example_data/image_region_caption/image_region_caption_demo.jsonl",
         cache_path: str = "../cache/image_region_caption",
         file_name_prefix: str = "region_caption",
@@ -63,55 +72,23 @@ huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --loca
         output_image_with_bbox_path: str = "../cache/image_region_caption/image_with_bbox_result.jsonl",
     ):
 ```
-> **⚠️ 模型路径配置的重要提示（以 `Qwen2.5-VL-3B-Instruct` 为例）：**
-> 
-> * **如果您已经下载好了模型文件**：请将 `model_path` 修改为您的本地模型路径。**务必保证**模型存放的最终文件夹名称精确为 `Qwen2.5-VL-3B-Instruct`，否则底层解析时将无法正确匹配和识别该模型。
-> * **如果您还未下载模型（需要自动下载）**：请一定要指定 `download_dir` 参数，并且该目录路径**必须以** `Qwen2.5-VL-3B-Instruct` **结尾**（正如默认参数所示），否则下载完成后同样会导致框架无法识别模型。
 
-### 第五步：一键运行
-
-```bash
-cd gpu_pipelines
-python image_region_caption_pipeline.py
+```python
+self.vlm_serving = APIVLMServing_openai(
+            api_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            model_name="gpt-4o-mini",
+            image_io=None,
+            send_request_stream=False,
+            max_workers=10,
+            timeout=1800
+        )
 ```
-> **🛠️ 常见问题排查 (Troubleshooting)**
-> 
-> **问题 1：** 如果遇到类似如下的动态链接库冲突报错：
-> `ImportError: .../miniconda3/envs/Dataflow-MM/lib/python3.12/site-packages/torch/lib/../../nvidia/cusparse/lib/libcusparse.so.12: undefined symbol: __nvJitLinkComplete_12_4, version libnvJitLink.so.12`
-> 
-> **解决方法：** 这通常是环境变量干扰导致的。请在运行命令前清空 `LD_LIBRARY_PATH`：
-> ```bash
-> LD_LIBRARY_PATH="" python image_region_caption_pipeline.py
-> ```
-> 
-> **问题 2：** 如果您使用的是 **Qwen 系列模型**，并且遇到以下报错：
-> `KeyError: "Missing required keys in rope_scaling for 'rope_type'='None': {'rope_type'}"`
-> 
-> **解决方法：** 打开模型文件夹下的 `config.json` 文件，找到 `rope_scaling` 配置块，将 `"type"` 字段修改为 `"rope_type"` 即可。
-> 
-> **修改前：**
-> ```json
-> "rope_scaling": {
->   "type": "mrope",
->   "mrope_section": [
->     16,
->     24,
->     24
->   ]
-> }
-> ```
-> 
-> **修改后：**
-> ```json
-> "rope_scaling": {
->   "rope_type": "mrope",
->   "mrope_section": [
->     16,
->     24,
->     24
->   ]
-> }
-> ```
+
+### 第六步：一键运行
+```bash
+cd api_pipelines
+python image_region_caption_api_pipeline.py
+```
 
 ---
 
@@ -122,7 +99,7 @@ python image_region_caption_pipeline.py
 输入数据通常包含图像路径和对应的边界框列表（可选）：
 
 * **image**：图像文件路径。
-* **bbox**：边界框坐标列表，通常格式为 `[[x, y, w, h], ...]`。
+* **bbox**：边界框坐标列表，通常格式为 `[[x, y, w, h], ...]` 。
 
 **输入数据示例**：
 
@@ -189,10 +166,12 @@ python image_region_caption_pipeline.py
 
 ## 4. 流水线示例
 
-以下是完整的 `ImageRegionCaptionPipeline` 代码实现。
+以下是完整的 `ImageRegionCaptionAPIPipeline` 代码实现。
 
 ```python
-from dataflow.serving.local_model_vlm_serving import LocalModelVLMServing_vllm
+import os
+os.environ["DF_API_KEY"] = "sk-xxxx"
+
 from dataflow.operators.core_vision.generate.image_bbox_generator import (
     ImageBboxGenerator, 
     ExistingBBoxDataGenConfig
@@ -202,13 +181,10 @@ from dataflow.operators.core_vision.generate.prompted_vqa_generator import (
 )
 from dataflow.utils.storage import FileStorage
 
-
+from dataflow.serving.api_vlm_serving_openai import APIVLMServing_openai
 class ImageRegionCaptionPipeline:
     def __init__(
         self,
-        model_path: str = "Qwen/Qwen2.5-VL-3B-Instruct",
-        hf_cache_dir: str = "~/.cache/huggingface",
-        download_dir: str = "../ckpt/models/Qwen2.5-VL-3B-Instruct",
         first_entry_file: str = "../example_data/image_region_caption/image_region_caption_demo.jsonl",
         cache_path: str = "../cache/image_region_caption",
         file_name_prefix: str = "region_caption",
@@ -237,17 +213,16 @@ class ImageRegionCaptionPipeline:
             file_name_prefix=file_name_prefix,
             cache_type=cache_type
         )
-        self.serving = LocalModelVLMServing_vllm(
-            hf_model_name_or_path=model_path,
-            hf_cache_dir=hf_cache_dir,
-            hf_local_dir=download_dir,
-            vllm_tensor_parallel_size=1,
-            vllm_temperature=0.7,
-            vllm_top_p=0.9,
-            vllm_max_tokens=512,
+        self.vlm_serving = APIVLMServing_openai(
+            api_url="https://dashscope.aliyuncs.com/compatible-mode/v1", # Any API platform compatible with OpenAI format
+            model_name="gpt-4o-mini",
+            image_io=None,
+            send_request_stream=False,
+            max_workers=10,
+            timeout=1800
         )
         self.bbox_generator = ImageBboxGenerator(config=self.cfg)
-        self.caption_generator = PromptedVQAGenerator(serving=self.serving,)
+        self.caption_generator = PromptedVQAGenerator(serving=self.vlm_serving,system_prompt="You are a helpful assistant.")
         self.input_image_key = input_image_key
         self.input_bbox_key = input_bbox_key
         self.bbox_record=None
@@ -256,7 +231,7 @@ class ImageRegionCaptionPipeline:
         self.bbox_generator.run(
             storage=self.bbox_storage.step(),
             input_image_key=self.input_image_key,
-            input_bbox_key=self.input_bbox_key,
+            input_bbox_key=self.input_bbox_key
         )
 
         self.caption_generator.run(

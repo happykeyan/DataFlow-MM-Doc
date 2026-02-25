@@ -7,27 +7,25 @@ permalink: /en/mm_guide/contextvqa_pipeline/
 
 ## 1. Overview
 
-The **ContextVQA Multimodal QA Data Generation Pipeline** is designed to automatically generate **Visual Question Answering (VQA) data equipped with external knowledge contexts** starting from images. This pipeline utilizes Vision-Language Models (VLM) to generate Wikipedia-style articles related to the image and corresponding QA pairs, which are then parsed into structured data.
-
-
+The **ContextVQA Multimodal QA Data Generation Pipeline** is designed to automatically generate **visual question answering (Context-based VQA) data with external knowledge contexts** starting from images. This pipeline utilizes Vision-Language Models (VLM) to generate Wikipedia-style articles related to the images and corresponding QA pairs, which are then parsed into structured data.
 
 We support the following application scenarios:
 
 * **Knowledge-based VQA Data Synthesis**: Building QA datasets that require external knowledge reasoning.
 * **Multimodal RAG Data Construction**: Generating high-quality data for training Retrieval-Augmented Generation (RAG) systems.
-* **Visual Reasoning Training**: Generating data where the question points to the image, but the answer must be reasoned from the accompanying text context.
+* **Visual Reasoning Training**: Generating questions that point to the image, but require answers reasoned from the textual context.
 
-The main stages of the pipeline include:
+The main flow includes:
 
-1.  **Data Loading**: Reading data files containing image paths.
-2.  **Context and QA Generation**: Using a VLM to generate a Wikipedia-style article and raw QA pairs based on the image.
-3.  **Data Cleaning and Structuring**: Parsing raw text to extract a structured `{context, qas}` format.
+1. **Data Loading**: Reading data files containing image paths.
+2. **Context and QA Generation**: Utilizing a locally deployed VLM to generate Wikipedia-style articles and raw QA pairs based on the image.
+3. **Data Cleaning and Structuring**: Parsing raw text to extract a structured `{context, qas}` format.
 
 ---
 
 ## 2. Quick Start
 
-### Step 1: Create a New DataFlow Working Directory
+### Step 1: Create a New DataFlow Work Folder
 
 ```bash
 mkdir run_dataflow_mm
@@ -42,34 +40,45 @@ dataflow init
 
 ```
 
-After initialization, you will see the generated file structure, including:
+You will now see:
 
 ```bash
 gpu_pipelines/context_vqa.py  
 
 ```
 
-### Step 3: Configure Model and Data Paths
+### Step 3: Download Example Data
 
-Modify the VLM model path and dataset location in `context_vqa.py`:
-
-```python
-parser.add_argument("--model_path", default="Qwen/Qwen2.5-VL-3B-Instruct") # Update to your local model path
-parser.add_argument("--hf_cache_dir", default="~/.cache/huggingface")
-parser.add_argument("--download_dir", default="./ckpt")
-parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default="cuda")
-
-# Update the data path below. 
-# We provide example data at: run_dataflow_mm/example_data/image_to_text_pipeline/capsbench_captions.json
-# Note: You can download the actual images using the "source" URLs provided within the JSON file.
-parser.add_argument("--images_file", default="dataflow/example/image_to_text_pipeline/capsbench_captions.json") 
-parser.add_argument("--cache_path", default="./cache_local")
-parser.add_argument("--file_name_prefix", default="context_vqa")
-parser.add_argument("--cache_type", default="json")
+```bash
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 
-### Step 4: Launch the Pipeline
+### Step 4: Configure Model and Data Paths
+
+Modify the class initialization parameters directly in `context_vqa.py` (no longer passed via command line arguments):
+
+```python
+# Model Serving Configuration
+self.serving = LocalModelVLMServing_vllm(
+    hf_model_name_or_path="Qwen/Qwen2.5-VL-3B-Instruct",
+    hf_cache_dir="~/.cache/huggingface",
+    hf_local_dir="./ckpt",
+    vllm_tensor_parallel_size=1,
+    vllm_max_tokens=512,
+)
+
+# Data Storage Configuration
+self.storage = FileStorage(
+    first_entry_file_name="./example_data/image_contextvqa/sample_data.json",
+    cache_path="./cache_local",
+    file_name_prefix="context_vqa",
+    cache_type="json",
+)
+
+```
+
+### Step 5: One-Click Run
 
 ```bash
 python gpu_pipelines/context_vqa.py
@@ -82,106 +91,74 @@ python gpu_pipelines/context_vqa.py
 
 ### 1. **Input Data**
 
-The input data for this process primarily contains the following fields:
+Input data is managed through `FileStorage`, supporting breakpoint resumption.
 
-* **image**: Path to the image file (local path or URL).
-* **id** (optional): Unique identifier for the data.
+**Input Data Example (`sample_data.json`)**:
 
-Data is managed via `FileStorage`, which supports breakpoint resumption (checkpointing).
-
-**Input Data Example**:
-
-```jsonl
-{"id": 1, "image": "./images/landmark.jpg"}
-{"id": 2, "image": "./images/animal.jpg"}
+```json
+[
+    {
+        "image": ["./example_data/image_contextvqa/person.png"],
+        "conversation": [
+            {
+                "from": "human",
+                "value": "Write a Wikipedia article related to this image without directly referring to the image. Then write question answer pairs..."
+            }
+        ]
+    }
+]
 
 ```
-
-Example images can be found at `https://huggingface.co/datasets/OpenDCAI/dataflow-demo-image/tree/main/capsbench_images`. Additionally, we have synthesized 200k high-quality context VQA data records for the community to experience at `https://huggingface.co/datasets/OpenDCAI/dataflow-mm-context_vqa`.
 
 ### 2. **Core Operator Logic**
 
-The pipeline completes its task by concatenating two core operators:
+#### A. **PromptedVQAGenerator (Context Generation)**
 
-#### A. **FixPromptedVQAGenerator (Context Generation)**
-
-This operator uses the VLM model to generate raw text according to a preset prompt template.
-
-**Functions:**
-
-* Generates a Wikipedia-style science article based on the image.
-* Generates QA pairs based on the article.
-* **Prompt Constraints**: The question points to the image but avoids direct mention of object names; answers must come from the article content and not be objects in the image; answers should be concise.
-
-**Model Serving Configuration**:
-
-```python
-self.serving = LocalModelVLMServing_vllm(
-    hf_model_name_or_path=model_path,
-    hf_cache_dir=hf_cache_dir,
-    vllm_tensor_parallel_size=1,
-    vllm_temperature=0.7,  # Maintain a level of creativity
-    vllm_top_p=0.9,
-    vllm_max_tokens=512,
-)
-
-```
+This operator calls the local VLM model to generate raw text based on built-in Wikipedia-style prompt templates.
 
 **Operator Execution**:
 
 ```python
 self.vqa_generator.run(
     storage=self.storage.step(),
-    input_image_key="image",
-    output_answer_key="vqa" # Outputs the raw generated text
+    input_conversation_key="conversation",
+    input_image_key=input_image_key,
+    output_answer_key=output_answer_key,
 )
 
 ```
 
-#### B. **WikiQARefiner (Result Refinement)**
+#### B. **WikiQARefiner (Result Parsing)**
 
-This operator is responsible for cleaning the unstructured text generated by the VLM and converting it into a standard format.
-
-**Functions:**
-
-* Cleans Markdown formatting and redundant white space.
-* Separates article content (Context) from QA pairs (QAs).
+This operator cleans the unstructured text generated by the VLM and converts it into a standard format, separating the article content (Context) from the question-answer pairs (QAs).
 
 **Operator Execution**:
 
 ```python
 self.refiner.run(
     storage=self.storage.step(),
-    input_key="vqa",          # Inputs raw text from the previous step
-    output_key="context_vqa"  # Outputs final structured data
+    input_key="vqa",          # Raw text from the previous step
+    output_key="context_vqa"  # Final structured data
 )
 
 ```
 
 ### 3. **Output Data**
 
-Ultimately, the output generated by the pipeline will include:
-
-* **image**: Original image path.
-* **vqa**: Raw text generated by the VLM (intermediate result).
-* **context_vqa**: Final structured result containing `context` (article) and `qas` (QA list).
+The final structured data includes `context` (article) and `qas` (list of questions and answers).
 
 **Output Data Example**:
 
 ```json
 {
     "id": 1,
-    "image": "./images/landmark.jpg",
+    "image": ["./example_data/image_contextvqa/person.png"],
     "context_vqa": {
-        "context": "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France...",
+        "context": "Nightmare Alley is a 2021 American psychological thriller film...",
         "qas": [
             {
-                "question": "In which city is this structure located?",
-                "answer": "Paris"
-            },
-            {
-                "question": "What material is the tower primarily constructed from?",
-                "answer": "wrought-iron"
+                "question": "What genre does this film belong to?",
+                "answer": "Psychological thriller"
             }
         ]
     }
@@ -193,45 +170,35 @@ Ultimately, the output generated by the pipeline will include:
 
 ## 4. Pipeline Example
 
-Below is the complete implementation of `ContextVQAPipeline`, supporting command-line arguments.
+Below is the complete `ContextVQAPipeline` code implementation.
 
 ```python
 import argparse
 from dataflow.utils.storage import FileStorage
+from dataflow.core import LLMServingABC
 from dataflow.serving.local_model_vlm_serving import LocalModelVLMServing_vllm
-from dataflow.operators.core_vision import FixPromptedVQAGenerator
-from dataflow.operators.core_vision import WikiQARefiner
+from dataflow.operators.core_vision import PromptedVQAGenerator, WikiQARefiner
+
 
 class ContextVQAPipeline:
     """
-    Complete batch ContextVQA Caption generation for images with a single command.
+    Batch generate ContextVQA data for images with a single command.
     """
 
-    def __init__(
-        self,
-        model_path: str,
-        *,
-        hf_cache_dir: str | None = None,
-        download_dir: str = "./ckpt",
-        device: str = "cuda",
-        first_entry_file: str = "dataflow/example/image_to_text_pipeline/capsbench_captions.jsonl",
-        cache_path: str = "./cache_local_skvqa",
-        file_name_prefix: str = "skvqa_cache_step",
-        cache_type: str = "jsonl",
-    ):
+    def __init__(self, llm_serving: LLMServingABC = None):
         # ---------- 1. Storage ----------
         self.storage = FileStorage(
-            first_entry_file_name=first_entry_file,
-            cache_path=cache_path,
-            file_name_prefix=file_name_prefix,
-            cache_type=cache_type,
+            first_entry_file_name="./example_data/image_contextvqa/sample_data.json",
+            cache_path="./cache_local",
+            file_name_prefix="context_vqa",
+            cache_type="json",
         )
 
         # ---------- 2. Serving ----------
-        self.serving = LocalModelVLMServing_vllm(
-            hf_model_name_or_path=model_path,
-            hf_cache_dir=hf_cache_dir,
-            hf_local_dir=download_dir,
+        self.vlm_serving = LocalModelVLMServing_vllm(
+            hf_model_name_or_path="Qwen/Qwen2.5-VL-3B-Instruct",
+            hf_cache_dir="~/.cache/huggingface",
+            hf_local_dir="./ckpt",
             vllm_tensor_parallel_size=1,
             vllm_temperature=0.7,
             vllm_top_p=0.9,
@@ -239,72 +206,35 @@ class ContextVQAPipeline:
         )
 
         # ---------- 3. Operator ----------
-        # Generate Wiki-style articles and QA using a specific Prompt
-        self.vqa_generator = FixPromptedVQAGenerator(
-            serving=self.serving,
-            system_prompt="You are a helpful assistant.",
-            user_prompt= """
-            Write a Wikipedia article related to this image without directly referring to the image. Then write question answer pairs. The question answer pairs should satisfy the following criteria.
-            1: The question should refer to the image.
-            2: The question should avoid mentioning the name of the object in the image.
-            3: The question should be answered by reasoning over the Wikipedia article.
-            4: The question should sound natural and concise.
-            5: The answer should be extracted from the Wikipedia article.
-            6: The answer should not be any objects in the image.
-            7: The answer should be a single word or phrase and list all correct answers separated by commas.
-            8: The answer should not contain 'and', 'or', rather you can split them into multiple answers.
-            """
+        self.vqa_generator = PromptedVQAGenerator(
+            serving=self.vlm_serving,
+            system_prompt= "You are a helpful assistant."
         )
 
-        # Result cleaning and structuring
         self.refiner = WikiQARefiner()
-
+        
     # ------------------------------------------------------------------ #
     def forward(self):
         input_image_key = "image"
         output_answer_key = "vqa"
         output_wiki_key = "context_vqa"
 
-        # Step 1: Generate raw text
         self.vqa_generator.run(
             storage=self.storage.step(),
+            input_conversation_key="conversation",
             input_image_key=input_image_key,
             output_answer_key=output_answer_key
         )
 
-        # Step 2: Parse into structured data
         self.refiner.run(
             storage=self.storage.step(),
             input_key=output_answer_key,
             output_key=output_wiki_key
         )
 
-# ---------------------------- CLI Entry -------------------------------- #
+# ---------------------------- CLI Entry ------------------------------- #
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Batch SKVQA caption generation with DataFlow")
-
-    parser.add_argument("--model_path", default="Qwen/Qwen2.5-VL-3B-Instruct")
-    parser.add_argument("--hf_cache_dir", default="~/.cache/huggingface")
-    parser.add_argument("--download_dir", default="./ckpt")
-    parser.add_argument("--device", choices=["cuda", "cpu", "mps"], default="cuda")
-
-    parser.add_argument("--images_file", default="dataflow/example/image_to_text_pipeline/capsbench_captions.jsonl")
-    parser.add_argument("--cache_path", default="./cache_local")
-    parser.add_argument("--file_name_prefix", default="context_vqa")
-    parser.add_argument("--cache_type", default="jsonl")
-
-    args = parser.parse_args()
-
-    pipe = ContextVQAPipeline(
-        model_path=args.model_path,
-        hf_cache_dir=args.hf_cache_dir,
-        download_dir=args.download_dir,
-        device=args.device,
-        first_entry_file=args.images_file,
-        cache_path=args.cache_path,
-        file_name_prefix=args.file_name_prefix,
-        cache_type=args.cache_type,
-    )
+    pipe = ContextVQAPipeline()
     pipe.forward()
 
 ```
