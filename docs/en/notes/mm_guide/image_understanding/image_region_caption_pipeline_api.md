@@ -26,17 +26,7 @@ The main process of the pipeline includes:
 
 ## 2. Quick Start
 
-### Step 1: Configure API Key
-
-Set your API Key environment variable in your script:
-
-```python
-import os
-os.environ["DF_API_KEY"] = "your_api_key"
-
-```
-
-### Step 2: Create a New DataFlow Working Directory
+### Step 1: Create a New DataFlow Working Directory
 
 ```bash
 mkdir run_dataflow
@@ -44,7 +34,7 @@ cd run_dataflow
 
 ```
 
-### Step 3: Initialize DataFlow-MM
+### Step 2: Initialize DataFlow-MM
 
 ```bash
 dataflowmm init
@@ -57,10 +47,20 @@ You will then see:
 api_pipelines/image_region_caption_api_pipeline.py
 ```
 
-### Step 4: Download Sample Data
+### Step 3: Download Sample Data
 
 ```bash
 huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir ./example_data
+
+```
+
+### Step 4: Configure API Key
+
+Set your API Key environment variable in `api_pipelines/image_region_caption_api_pipeline.py`:
+
+```python
+import os
+os.environ["DF_API_KEY"] = "your_api_key"
 
 ```
 

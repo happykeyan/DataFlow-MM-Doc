@@ -26,22 +26,13 @@ permalink: /zh/mm_guide/image_region_caption_pipeline_api/
 
 ## 2. 快速开始
 
-### 第一步：配置 API Key
-
-在脚本中设置 API Key 环境变量：
-
-```python
-import os
-os.environ["DF_API_KEY"] = "your_api_key"
-```
-
-### 第二步：创建新的 DataFlow 工作文件夹
+### 第一步：创建新的 DataFlow 工作文件夹
 ```bash
 mkdir run_dataflow
 cd run_dataflow
 ```
 
-### 第三步：初始化 DataFlow-MM
+### 第二步：初始化 DataFlow-MM
 ```bash
 dataflowmm init
 ```
@@ -50,9 +41,18 @@ dataflowmm init
 api_pipelines/image_region_caption_api_pipeline.py
 ```
 
-### 第四步：下载示例数据
+### 第三步：下载示例数据
 ```bash
 huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir ./example_data
+```
+
+### 第四步：配置 API Key
+
+在 `api_pipelines/image_region_caption_api_pipeline.py` 中设置 API Key 环境变量：
+
+```python
+import os
+os.environ["DF_API_KEY"] = "your_api_key"
 ```
 
 ### 第五步：配置参数
