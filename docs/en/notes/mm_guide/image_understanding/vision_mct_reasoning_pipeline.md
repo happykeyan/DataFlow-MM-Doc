@@ -39,13 +39,10 @@ cd run_mcts_reasoning
 
 Save the code in the "Pipeline Example" section below as `vision_mcts_pipeline.py`.
 
-### Step 3: Configure Parameters
-
-Ensure the input file (jsonl) contains the `tree` field (for extraction) or just `question/image` (for generation).
+### Step 3: Download Example Data
 
 ```bash
-# Install dependencies
-pip install open-dataflow vllm
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 
