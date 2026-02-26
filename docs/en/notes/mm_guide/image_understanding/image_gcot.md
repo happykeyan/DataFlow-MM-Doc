@@ -411,6 +411,4 @@ if __name__ == "__main__":
         download_dir="../ckpt/models/Qwen2.5-VL-3B-Instruct",
     )
     pipe.forward()
-
-
 ```

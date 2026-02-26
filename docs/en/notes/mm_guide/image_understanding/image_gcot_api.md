@@ -1,14 +1,14 @@
 ---
-title: Image Grounded CoT (GCoT) Pipeline
+title: Image Grounded CoT (GCoT) Pipeline (API version)
 icon: mdi:image-text
 createTime: 2026/01/11 20:44:55
-permalink: /en/mm_guide/image_gcot/
+permalink: /en/mm_guide/image_gcot_api/
 ---
 ## 1. Overview
 
 The **Image Grounded Chain-of-Thought (GCoT) Pipeline** is designed to automatically generate **Grounded Chain-of-Thought** data. This pipeline generates multi-step reasoning to answer a question and simultaneously spatially locates (via Bounding Boxes) the key objects mentioned during the reasoning process. This significantly enhances the interpretability and precision of multimodal data.
 
-Unlike traditional methods, this pipeline uses a **Single VLM (e.g., Qwen2.5-VL)** to handle both "Reasoning" and "Grounding" tasks, making the process streamlined and efficient.
+Unlike traditional methods, this pipeline uses a **Single VLM (e.g., GPT-5)** to handle both "Reasoning" and "Grounding" tasks, making the process streamlined and efficient.
 
 We support the following application scenarios:
 
@@ -67,7 +67,7 @@ os.environ["DF_API_KEY"] = "your_api_key"
 
 ### Step 5: Configure Parameters
 
-Configure the API service and input data paths in `api_pipelines/image_region_caption_api_pipeline.py`:
+Configure the API service and input data paths in `api_pipelines/image_gcot_api_pipeline.py`:
 
 ```python
     def __init__(
@@ -76,14 +76,18 @@ Configure the API service and input data paths in `api_pipelines/image_region_ca
         first_entry_file: str,
         cache_path: str = "../cache/cache_gcot",
         file_name_prefix: str = "gcot",
-        # Keys
         question_key: str = "question",
         answer_key: str = "answer",
         image_key: str = "image",
         output_key: str = "gcot",
-        # Config
         vllm_max_tokens: int = 512
     ):
+```
+
+```python
+    pipe = ImageGCoTPipeline(
+        first_entry_file="../example_data/capsbench_images/image_gcot_demo.jsonl"
+    )
 ```
 
 ```python
@@ -395,5 +399,4 @@ if __name__ == "__main__":
         first_entry_file="../example_data/capsbench_images/image_gcot_demo.jsonl"
     )
     pipe.forward()
-
 ```

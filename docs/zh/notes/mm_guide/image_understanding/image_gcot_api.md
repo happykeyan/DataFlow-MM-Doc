@@ -1,14 +1,14 @@
 ---
-title: 图像定位思维链 (GCoT) 生成流水线
+title: 图像定位思维链 (GCoT) 生成流水线（API版）
 icon: mdi:image-text
 createTime: 2026/01/11 20:44:55
-permalink: /zh/mm_guide/image_gcot/
+permalink: /zh/mm_guide/image_gcot_api/
 ---
 ## 1. 概述
 
 **图像定位思维链 (GCoT) 生成流水线** 旨在自动化生成**带视觉定位的思维链（Grounded Chain-of-Thought）**数据。该流水线通过多步推理，不仅生成回答问题的逻辑步骤，还将推理过程中提到的关键物体在图像中进行空间定位（Bounding Box），从而显著提升多模态数据的可解释性和精确度。
 
-与传统方法不同，本流水线采用 **单一 VLM（如 Qwen2.5-VL）** 同时完成“推理”和“定位”任务，流程更加精简高效。
+与传统方法不同，本流水线采用 **单一 VLM（如 GPT-5）** 同时完成“推理”和“定位”任务，流程更加精简高效。
 
 我们支持以下应用场景：
 
@@ -58,7 +58,7 @@ os.environ["DF_API_KEY"] = "your_api_key"
 
 ### 第五步：配置参数
 
-在 `api_pipelines/image_region_caption_api_pipeline.py` 中配置 API 服务和输入数据路径：
+在 `api_pipelines/image_gcot_api_pipeline.py` 中配置 API 服务和输入数据路径：
 
 ```python
     def __init__(
@@ -67,14 +67,18 @@ os.environ["DF_API_KEY"] = "your_api_key"
         first_entry_file: str,
         cache_path: str = "../cache/cache_gcot",
         file_name_prefix: str = "gcot",
-        # Keys
         question_key: str = "question",
         answer_key: str = "answer",
         image_key: str = "image",
         output_key: str = "gcot",
-        # Config
         vllm_max_tokens: int = 512
     ):
+```
+
+```python
+    pipe = ImageGCoTPipeline(
+        first_entry_file="../example_data/capsbench_images/image_gcot_demo.jsonl"
+    )
 ```
 
 ```python
@@ -385,6 +389,4 @@ if __name__ == "__main__":
         first_entry_file="../example_data/capsbench_images/image_gcot_demo.jsonl"
     )
     pipe.forward()
-
-
 ```
