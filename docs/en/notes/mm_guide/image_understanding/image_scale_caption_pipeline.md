@@ -40,13 +40,10 @@ cd run_scalecap
 
 Save the code in the "Pipeline Example" section below as `scalecap_pipeline.py`.
 
-### Step 3: Configure Parameters
-
-Ensure the VLM model path (e.g., Qwen2.5-VL) is correct.
+### Step 3: Download Example Data
 
 ```bash
-# Install dependencies
-pip install open-dataflow vllm
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 

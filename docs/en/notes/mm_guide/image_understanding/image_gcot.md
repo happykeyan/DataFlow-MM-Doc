@@ -39,13 +39,10 @@ cd run_gcot
 
 Save the code in the "Pipeline Example" section below as `image_gcot_pipeline.py`.
 
-### Step 3: Configure Parameters
-
-Ensure you have a VLM model capable of grounding (e.g., Qwen2.5-VL-7B-Instruct).
+### Step 3: Download Example Data
 
 ```bash
-# Install dependencies
-pip install open-dataflow vllm
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 

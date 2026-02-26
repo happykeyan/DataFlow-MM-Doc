@@ -36,13 +36,10 @@ cd run_vis_mcq
 
 Save the code in the "Pipeline Example" section below as `visual_mcq_pipeline.py`.
 
-### Step 3: Configure Parameters
-
-Control filtering thresholds via CLI. For example, requiring 100% visual accuracy and less than 25% blind accuracy:
+### Step 3: Download Example Data
 
 ```bash
-# Install dependencies
-pip install open-dataflow vllm
+huggingface-cli download --repo-type dataset OpenDCAI/dataflow-demo-image --local-dir example_data
 
 ```
 
